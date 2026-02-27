@@ -8,6 +8,10 @@ final class ProteinTrackerTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
+        // Clear UserDefaults so each test starts with a clean state
+        let domain = Bundle.main.bundleIdentifier ?? "ProteinTracker"
+        UserDefaults.standard.removePersistentDomain(forName: domain)
+        UserDefaults.standard.synchronize()
         viewModel = ProteinTrackerViewModel()
     }
     
