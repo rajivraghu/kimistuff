@@ -22,6 +22,10 @@ let package = Package(
             name: "ProteinTrackerTests",
             dependencies: ["ProteinTracker"],
             path: "ProteinTrackerTests"
+        ),
+        .testTarget(
+            name: "ProteinTrackerUITests",
+            path: "ProteinTrackerUITests"
         )
     ]
 )
