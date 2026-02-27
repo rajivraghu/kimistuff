@@ -8,13 +8,30 @@ def run_bin(cmd):
 
 os.makedirs("Screenshots", exist_ok=True)
 
-result = run(["xcrun", "xcresulttool", "get", "--path", "UITestResults.xcresult", "--format", "json"])
+xcresult_path = "UITestResults.xcresult"
+
+if not os.path.exists(xcresult_path):
+    print("UITestResults.xcresult not found - UI tests may have been skipped")
+    sys.exit(0)
+
+# Try new API first (Xcode 16+), fall back to legacy (Xcode 26 RC)
+result = run(["xcrun", "xcresulttool", "get", "object", "--path", xcresult_path, "--format", "json"])
+if result.returncode != 0:
+    # Fall back to legacy flag required by Xcode 26
+    result = run(["xcrun", "xcresulttool", "get", "--legacy", "--path", xcresult_path, "--format", "json"])
 if result.returncode != 0:
     print("Could not read xcresult:", result.stderr)
     sys.exit(0)
 
 data = json.loads(result.stdout)
 count = 0
+
+def extract_attachment(ref, name):
+    # Try new API first
+    img = run_bin(["xcrun", "xcresulttool", "get", "object", "--path", xcresult_path, "--id", ref])
+    if img.returncode != 0:
+        img = run_bin(["xcrun", "xcresulttool", "get", "--legacy", "--path", xcresult_path, "--id", ref])
+    return img
 
 def find_attachments(obj, depth=0):
     global count
@@ -30,7 +47,7 @@ def find_attachments(obj, depth=0):
         uti = obj.get("uniformTypeIdentifier", {}).get("_value", "")
         ref = obj.get("payloadRef", {}).get("id", {}).get("_value", "")
         if ref and "png" in uti:
-            img = run_bin(["xcrun", "xcresulttool", "get", "--path", "UITestResults.xcresult", "--id", ref])
+            img = extract_attachment(ref, name)
             fname = f"Screenshots/{name}.png"
             with open(fname, "wb") as f:
                 f.write(img.stdout)
