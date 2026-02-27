@@ -1,6 +1,7 @@
 import XCTest
 @testable import ProteinTracker
 
+@MainActor
 final class ProteinTrackerTests: XCTestCase {
     
     var viewModel: ProteinTrackerViewModel!
