@@ -4,7 +4,7 @@ options:
   deploymentTarget:
     iOS: "17.0"
 targets:
-  ProteinTrackerApp:
+  ProteinTracker:
     type: application
     platform: iOS
     sources:
@@ -12,6 +12,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kimistuff.ProteinTracker
+        PRODUCT_MODULE_NAME: ProteinTracker
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         SWIFT_VERSION: 5.9
@@ -24,7 +25,7 @@ targets:
     sources:
       - path: ProteinTrackerTests
     dependencies:
-      - target: ProteinTrackerApp
+      - target: ProteinTracker
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kimistuff.ProteinTrackerTests
