@@ -20,8 +20,10 @@ jobs:
       with:
         xcode-version: latest-stable
 
-    - name: Show Xcode Version
-      run: xcodebuild -version
+    - name: Show Xcode Version & Available Schemes
+      run: |
+        xcodebuild -version
+        xcodebuild -list 2>/dev/null || true
 
     - name: Build iOS Swift Package
       run: |
@@ -33,10 +35,11 @@ jobs:
     - name: Run Unit Tests
       run: |
         xcodebuild test \
-          -scheme ProteinTrackerTests \
+          -scheme ProteinTracker \
           -destination "platform=iOS Simulator,name=iPhone 16,OS=latest" \
           -derivedDataPath DerivedData \
-          -resultBundlePath UnitTestResults.xcresult
+          -resultBundlePath UnitTestResults.xcresult \
+          -only-testing:ProteinTrackerTests
 
     - name: Boot Simulator
       run: |
@@ -49,58 +52,59 @@ jobs:
     - name: Run UI Tests and Capture Screenshots
       run: |
         xcodebuild test \
-          -scheme ProteinTrackerUITests \
+          -scheme ProteinTracker \
           -destination "platform=iOS Simulator,name=iPhone 16,OS=latest" \
           -derivedDataPath DerivedData \
-          -resultBundlePath UITestResults.xcresult || true
+          -resultBundlePath UITestResults.xcresult \
+          -only-testing:ProteinTrackerUITests || true
 
     - name: Extract Screenshots
       if: always()
       run: |
         mkdir -p Screenshots
         python3 << 'PYEOF'
-        import json, subprocess, os
+import json, subprocess, os
 
-        def run(cmd):
-            return subprocess.run(cmd, capture_output=True, text=True)
+def run(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True)
 
-        def run_bin(cmd):
-            return subprocess.run(cmd, capture_output=True)
+def run_bin(cmd):
+    return subprocess.run(cmd, capture_output=True)
 
-        result = run(['xcrun', 'xcresulttool', 'get', '--path', 'UITestResults.xcresult', '--format', 'json'])
-        if result.returncode != 0:
-            print("Could not read xcresult:", result.stderr)
-            exit(0)
+result = run(['xcrun', 'xcresulttool', 'get', '--path', 'UITestResults.xcresult', '--format', 'json'])
+if result.returncode != 0:
+    print("Could not read xcresult:", result.stderr)
+    exit(0)
 
-        data = json.loads(result.stdout)
-        count = 0
+data = json.loads(result.stdout)
+count = 0
 
-        def find_attachments(obj, depth=0):
-            global count
-            if depth > 20 or not isinstance(obj, (dict, list)):
-                return
-            if isinstance(obj, list):
-                for item in obj:
-                    find_attachments(item, depth+1)
-                return
-            type_name = obj.get('_type', {}).get('_name', '')
-            if type_name == 'ActionTestAttachment':
-                name = obj.get('name', {}).get('_value', f'screenshot_{count}')
-                uti = obj.get('uniformTypeIdentifier', {}).get('_value', '')
-                ref = obj.get('payloadRef', {}).get('id', {}).get('_value', '')
-                if ref and 'png' in uti:
-                    img = run_bin(['xcrun', 'xcresulttool', 'get', '--path', 'UITestResults.xcresult', '--id', ref])
-                    fname = f'Screenshots/{name}.png'
-                    with open(fname, 'wb') as f:
-                        f.write(img.stdout)
-                    print(f'Saved: {fname}')
-                    count += 1
-            for v in obj.values():
-                find_attachments(v, depth+1)
+def find_attachments(obj, depth=0):
+    global count
+    if depth > 20 or not isinstance(obj, (dict, list)):
+        return
+    if isinstance(obj, list):
+        for item in obj:
+            find_attachments(item, depth+1)
+        return
+    type_name = obj.get('_type', {}).get('_name', '')
+    if type_name == 'ActionTestAttachment':
+        name = obj.get('name', {}).get('_value', f'screenshot_{count}')
+        uti = obj.get('uniformTypeIdentifier', {}).get('_value', '')
+        ref = obj.get('payloadRef', {}).get('id', {}).get('_value', '')
+        if ref and 'png' in uti:
+            img = run_bin(['xcrun', 'xcresulttool', 'get', '--path', 'UITestResults.xcresult', '--id', ref])
+            fname = f'Screenshots/{name}.png'
+            with open(fname, 'wb') as f:
+                f.write(img.stdout)
+            print(f'Saved: {fname}')
+            count += 1
+    for v in obj.values():
+        find_attachments(v, depth+1)
 
-        find_attachments(data)
-        print(f'Total screenshots: {count}')
-        PYEOF
+find_attachments(data)
+print(f'Total screenshots: {count}')
+PYEOF
         ls -la Screenshots/
 
     - name: Upload Screenshots
