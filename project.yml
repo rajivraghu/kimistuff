@@ -1,0 +1,27 @@
+name: ProteinTracker
+options:
+  bundleIdPrefix: com.kimistuff
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  ProteinTrackerApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: ProteinTracker
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kimistuff.ProteinTracker
+        INFOPLIST_FILE: ProteinTracker/Info.plist
+        SWIFT_VERSION: 5.9
+  ProteinTrackerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ProteinTrackerTests
+    dependencies:
+      - target: ProteinTrackerApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kimistuff.ProteinTrackerTests
+        SWIFT_VERSION: 5.9
