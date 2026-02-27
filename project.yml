@@ -12,8 +12,12 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kimistuff.ProteinTracker
-        INFOPLIST_FILE: ProteinTracker/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         SWIFT_VERSION: 5.9
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
   ProteinTrackerTests:
     type: bundle.unit-test
     platform: iOS
@@ -24,4 +28,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kimistuff.ProteinTrackerTests
+        GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: 5.9
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
