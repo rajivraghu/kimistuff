@@ -11,6 +11,7 @@ import SwiftUI
 @main
 struct nstuffzWidgetsBundle: WidgetBundle {
     var body: some Widget {
+        VoiceCommandWidget()
         nstuffzWidgetsLiveActivity()
     }
 }

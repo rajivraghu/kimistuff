@@ -6,3 +6,7 @@ xcuserdata
 *.swp
 *.swo
 *~
+
+# Secrets & API keys
+GoogleService-Info.plist
+Secrets.plist

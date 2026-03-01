@@ -6,5 +6,18 @@
 	<string>We will schedule alerts for reminders you create within the app.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We need microphone access to record your voice commands for creating reminders.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>nstuffz</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>com.rajivraghu.nstuffz</string>
+		</dict>
+	</array>
 </dict>
 </plist>

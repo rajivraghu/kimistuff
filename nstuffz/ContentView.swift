@@ -4,7 +4,14 @@ struct ContentView: View {
     var store: ReminderStore
     @State private var showingAddSheet = false
     @State private var editingReminder: Reminder?
+    @State private var selectedNote: QuickNote?
+    @State private var editedNoteText = ""
+    @State private var showDeleteConfirmation = false
+    @State private var noteToDelete: QuickNote?
     @Namespace private var namespace
+
+    // Sticky note colors for visual variety
+    private let stickyColors: [Color] = [.yellow, .orange, .green, .pink, .cyan, .mint]
 
     private var upcomingReminders: [Reminder] {
         store.reminders
@@ -29,7 +36,7 @@ struct ContentView: View {
                 )
                 .ignoresSafeArea()
 
-                if store.reminders.isEmpty {
+                if store.reminders.isEmpty && store.quickNotes.isEmpty {
                     emptyStateView
                 } else {
                     reminderList
@@ -52,6 +59,27 @@ struct ContentView: View {
             }
             .sheet(item: $editingReminder) { reminder in
                 AddReminderView(store: store, existingReminder: reminder)
+            }
+            .sheet(item: $selectedNote) { note in
+                noteDetailSheet(note)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
+            }
+            .alert("Delete Note?", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    noteToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    if let note = noteToDelete {
+                        withAnimation(.spring(duration: 0.3)) {
+                            store.deleteNote(note)
+                        }
+                        noteToDelete = nil
+                        selectedNote = nil
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete this note? This cannot be undone.")
             }
         }
     }
@@ -89,6 +117,17 @@ struct ContentView: View {
     private var reminderList: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
+                // Quick Notes (sticky notes)
+                if !store.quickNotes.isEmpty {
+                    sectionHeader("Quick Stuff")
+
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                        ForEach(Array(store.quickNotes.enumerated()), id: \.element.id) { index, note in
+                            stickyNoteCard(note, color: stickyColors[index % stickyColors.count])
+                        }
+                    }
+                }
+
                 if !upcomingReminders.isEmpty {
                     sectionHeader("Upcoming")
 
@@ -153,9 +192,9 @@ struct ContentView: View {
                     .strikethrough(!reminder.isEnabled, color: .secondary)
 
                 HStack(spacing: 8) {
-                    Image(systemName: "clock")
+                    Image(systemName: "calendar")
                         .font(.caption2)
-                    Text(reminder.timeString)
+                    Text(reminder.dateString)
                         .font(.caption)
 
                     if !reminder.repeatDays.isEmpty {
@@ -175,6 +214,11 @@ struct ContentView: View {
             }
 
             Spacer()
+
+            // Cloud sync status
+            Image(systemName: reminder.isSynced ? "checkmark.icloud.fill" : "icloud.slash")
+                .font(.caption)
+                .foregroundStyle(reminder.isSynced ? .green : .orange)
 
             // Actions menu
             Menu {
@@ -200,6 +244,118 @@ struct ContentView: View {
         }
         .padding()
         .glassEffect(in: .rect(cornerRadius: 20))
+    }
+
+    // MARK: - Sticky Note Card
+
+    private func stickyNoteCard(_ note: QuickNote, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "pin.fill")
+                    .font(.caption2)
+                    .foregroundStyle(color)
+                    .rotationEffect(.degrees(-30))
+
+                Spacer()
+
+                // Sync status
+                Image(systemName: note.isSynced ? "checkmark.icloud.fill" : "icloud.slash")
+                    .font(.system(size: 8))
+                    .foregroundStyle(note.isSynced ? .green : .orange)
+            }
+
+            Text(note.text)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .lineLimit(4)
+                .multilineTextAlignment(.leading)
+
+            Spacer(minLength: 0)
+
+            Text(note.timeAgo)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .frame(minHeight: 120)
+        .background(color.opacity(0.15), in: .rect(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(color.opacity(0.3), lineWidth: 1)
+        )
+        .onTapGesture {
+            editedNoteText = note.text
+            selectedNote = note
+        }
+    }
+
+    // MARK: - Note Detail Sheet
+
+    private func noteDetailSheet(_ note: QuickNote) -> some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                // Editable text area
+                TextEditor(text: $editedNoteText)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(12)
+                    .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 12))
+                    .frame(minHeight: 150)
+
+                // Time info
+                HStack {
+                    Image(systemName: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(note.timeAgo)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: note.isSynced ? "checkmark.icloud.fill" : "icloud.slash")
+                        .font(.caption)
+                        .foregroundStyle(note.isSynced ? .green : .orange)
+                }
+
+                // Delete button
+                Button(role: .destructive) {
+                    noteToDelete = note
+                    showDeleteConfirmation = true
+                } label: {
+                    HStack {
+                        Image(systemName: "trash")
+                        Text("Delete Note")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Quick Note")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        selectedNote = nil
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        if editedNoteText != note.text {
+                            var updated = note
+                            updated.text = editedNoteText
+                            Task { await store.updateNote(updated) }
+                        }
+                        selectedNote = nil
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(editedNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
     }
 }
 
