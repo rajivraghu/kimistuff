@@ -2,30 +2,30 @@
 import PackageDescription
 
 let package = Package(
-    name: "ProteinTracker",
+    name: "HabitTracker",
     platforms: [
         .iOS(.v17)
     ],
     products: [
         .library(
-            name: "ProteinTracker",
-            targets: ["ProteinTracker"]
+            name: "HabitTracker",
+            targets: ["HabitTracker"]
         )
     ],
     dependencies: [],
     targets: [
         .target(
-            name: "ProteinTracker",
-            path: "ProteinTracker"
+            name: "HabitTracker",
+            path: "HabitTracker"
         ),
         .testTarget(
-            name: "ProteinTrackerTests",
-            dependencies: ["ProteinTracker"],
-            path: "ProteinTrackerTests"
+            name: "HabitTrackerTests",
+            dependencies: ["HabitTracker"],
+            path: "HabitTrackerTests"
         ),
         .testTarget(
-            name: "ProteinTrackerUITests",
-            path: "ProteinTrackerUITests"
+            name: "HabitTrackerUITests",
+            path: "HabitTrackerUITests"
         )
     ]
 )
