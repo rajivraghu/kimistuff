@@ -481,7 +481,7 @@ struct SettingsView: View {
                             }
                         }
                         .padding()
-                        .liquidGlass(cornerRadius: 16, opacity: 0.15))
+                        .liquidGlass(cornerRadius: 16, opacity: 0.15)
                         
                         // About Section
                         VStack(alignment: .leading, spacing: 12) {
