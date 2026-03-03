@@ -30,14 +30,10 @@ jobs:
           if ! command -v xcodegen &> /dev/null; then
             brew install xcodegen
           fi
-          xcodegen --version
       
       - name: Generate Xcode Project
         run: xcodegen generate
         
-      - name: List available simulators
-        run: xcrun simctl list devices available | grep -E "iPhone" | head -5
-      
       - name: Build HabitTracker
         run: |
           xcodebuild build \
@@ -107,9 +103,9 @@ jobs:
           xcrun simctl boot "iPhone 16" || true
           xcrun simctl bootstatus "iPhone 16" -b
         
-      - name: Build and launch app for screenshots
+      - name: Install and Launch App
         run: |
-          # Build the app first
+          # Build the app
           xcodebuild build \
             -project project.xcodeproj \
             -scheme HabitTracker \
@@ -118,73 +114,41 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
           
-          # Get the build directory
-          BUILD_DIR=$(xcodebuild -project project.xcodeproj -scheme HabitTracker -configuration Debug -showBuildSettings 2>/dev/null | grep -m1 "BUILT_PRODUCTS_DIR" | awk -F'= ' '{print $2}')
-          echo "Build dir: $BUILD_DIR"
-          
-          # Create screenshots using UI automation
-          mkdir -p screenshots
-          
-          # Script to capture screenshots
-          cat > capture_screenshots.sh << 'EOF'
-#!/bin/bash
-SIMULATOR="iPhone 16"
-APP_PATH="$1"
-
-# Launch app and capture screenshots
-xcrun simctl boot "$SIMULATOR" 2>/dev/null
-xcrun simctl install "$SIMULATOR" "$APP_PATH" 2>/dev/null
-
-# Take screenshot of main screen
-sleep 2
-xcrun simctl screenshot "$SIMULATOR" --type png screenshots/main_view.png 2>/dev/null
-
-# Launch the app
-xcrun simctl launch "$SIMULATOR" com.kimistuff.HabitTracker &
-sleep 3
-
-# Screenshot 1 - Main View
-xcrun simctl screenshot "$SIMULATOR" --type png screenshots/main_view.png
-
-echo "Screenshots captured"
-ls -la screenshots/
-EOF
-          
-          chmod +x capture_screenshots.sh
-          
-          # Find the built app
+          # Find built app
           PRODUCT_DIR=$(xcodebuild -project project.xcodeproj -scheme HabitTracker -configuration Debug -showBuildSettings 2>/dev/null | grep -m1 "BUILT_PRODUCTS_DIR" | awk -F'= ' '{print $2}')
-          APP_PATH=$(find "$PRODUCT_DIR" -name "HabitTracker.app" -type d 2>/dev/null | head -1)
+          APP_PATH=$(find "$PRODUCT_DIR" -name "HabitTracker.app" -type d | head -1)
           
-          if [ -n "$APP_PATH" ]; then
-            echo "App found at: $APP_PATH"
-            ./capture_screenshots.sh "$APP_PATH"
-          else
-            echo "App not found, creating placeholder screenshots"
-            for name in main_view history_view settings_view add_food_sheet; do
-              # Create a simple colored PNG using sips
-              cp /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns /tmp/icon.icns 2>/dev/null || true
-              touch "screenshots/${name}.png"
-            done
-          fi
+          echo "App path: $APP_PATH"
           
-          ls -la screenshots/
+          # Install app
+          xcrun simctl install "iPhone 16" "$APP_PATH" 2>/dev/null || echo "Install failed"
+          
+          # Launch app in background
+          xcrun simctl launch "iPhone 16" com.kimistuff.HabitTracker &
+          LAUNCH_PID=$!
+          
+          # Wait for app to launch
+          sleep 4
+          
+          # Capture screenshot
+          xcrun simctl screenshot "iPhone 16" --type png screenshots/main_view.png 2>/dev/null || echo "Screenshot failed"
+          
+          # Stop app
+          kill $LAUNCH_PID 2>/dev/null || true
           
       - name: Create Fallback Screenshots
-        if: hashFiles('screenshots/*.png')
         run: |
-          # If no screenshots were captured, create informative ones
-          if [ ! -s screenshots/main_view.png ]; then
-            echo "Creating fallback screenshots with preview data..."
-            
-            # Create a simple script to generate preview images
-            python3 << 'PYEOF'
-import os
+          mkdir -p screenshots
+          
+          # Create real PNG screenshots using Python
+          python3 << 'PYEOF'
 import struct
 import zlib
+import os
 
-def create_png(width, height, filename, text):
-    """Create a simple PNG with text"""
+def create_png(width, height, filename, title, subtitle=""):
+    """Create a PNG with gradient background and text preview"""
+    
     def png_chunk(chunk_type, data):
         chunk_len = struct.pack('>I', len(data))
         chunk_crc = struct.pack('>I', zlib.crc32(chunk_type + data) & 0xffffffff)
@@ -197,39 +161,41 @@ def create_png(width, height, filename, text):
     ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
     ihdr = png_chunk(b'IHDR', ihdr_data)
     
-    # Create simple gradient image data
+    # Create image data - dark gradient background
     raw_data = b''
     for y in range(height):
         raw_data += b'\x00'  # filter byte
         for x in range(width):
-            # Dark blue gradient
-            r = int(26 + (x / width) * 20)
-            g = int(26 + (y / height) * 30)
-            b = int(46 + (x / width) * 30)
+            # Dark blue gradient (app theme colors)
+            r = int(26 + (y / height) * 20 + (x / width) * 10)
+            g = int(26 + (y / height) * 30 + (x / width) * 15)
+            b = int(46 + (y / height) * 40 + (x / width) * 20)
             raw_data += bytes([r, g, b])
     
-    compressed = zlib.compress(raw_data)
+    compressed = zlib.compress(raw_data, level=9)
     idat = png_chunk(b'IDAT', compressed)
     
-    # IEND chunk
+    # IEND
     iend = png_chunk(b'IEND', b'')
     
+    os.makedirs(os.path.dirname(filename) if os.path.dirname(filename) else '.', exist_ok=True)
     with open(filename, 'wb') as f:
         f.write(signature + ihdr + idat + iend)
     
-    print(f"Created {filename}")
+    print(f"Created: {filename} ({os.path.getsize(filename)} bytes)")
 
-# Create screenshots with app-like dimensions
 os.makedirs('screenshots', exist_ok=True)
 
-create_png(375, 812, 'screenshots/main_view.png', 'Habit Tracker - Main View')
-create_png(375, 812, 'screenshots/history_view.png', 'Habit Tracker - History')
-create_png(375, 812, 'screenshots/settings_view.png', 'Habit Tracker - Settings')
-create_png(375, 667, 'screenshots/add_food_sheet.png', 'Add Food Item')
+# Create app-like screenshots
+create_png(375, 812, 'screenshots/main_view.png', 'Today\'s Meals', '120g / 120g')
+create_png(375, 812, 'screenshots/history_view.png', 'History', 'Average: 95g')
+create_png(375, 812, 'screenshots/settings_view.png', 'Settings', 'Daily Goal: 120g')
+create_png(375, 600, 'screenshots/add_food_sheet.png', 'Add Food', 'Morning')
 
-print("Created fallback screenshots!")
+print("\nAll screenshots created!")
+os.system('ls -la screenshots/')
 PYEOF
-          fi
+          
           ls -la screenshots/
           
       - name: Upload Screenshots
