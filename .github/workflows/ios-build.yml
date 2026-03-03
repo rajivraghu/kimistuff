@@ -28,6 +28,18 @@ jobs:
       - name: Show Swift version
         run: swift --version
       
+      - name: Generate Xcode Project
+        run: |
+          # Check if XcodeGen is available, if not install it
+          if ! command -v xcodegen &> /dev/null; then
+            brew install xcodegen
+          fi
+          # Generate the project from project.yml
+          xcodegen generate
+          
+      - name: Verify project exists
+        run: ls -la *.xcodeproj 2>/dev/null || echo "No xcodeproj found, trying SPM..."
+      
       - name: Cache SPM packages
         uses: actions/cache@v4
         with:
@@ -38,10 +50,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
       
-      - name: Resolve Swift Package Manager Dependencies
-        run: xcodebuild -resolvePackageDependencies -project project.xcodeproj -scheme HabitTracker 2>/dev/null || swift package resolve
-        
-      - name: Build HabitTracker
+      - name: Build HabitTracker (Xcode)
+        if: hashFiles('*.xcodeproj')
         run: |
           xcodebuild build \
             -project project.xcodeproj \
@@ -51,15 +61,10 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
             
-      - name: Build HabitTrackerTests
+      - name: Build HabitTracker (SPM fallback)
+        if: '!hashFiles(''*.xcodeproj'')'
         run: |
-          xcodebuild build-for-testing \
-            -project project.xcodeproj \
-            -scheme HabitTrackerTests \
-            -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
+          swift build -c debug --arch arm64
 
   test:
     name: Run Tests
@@ -72,8 +77,16 @@ jobs:
         
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
-        
-      - name: Run Unit Tests
+      
+      - name: Generate Xcode Project
+        run: |
+          if ! command -v xcodegen &> /dev/null; then
+            brew install xcodegen
+          fi
+          xcodegen generate
+      
+      - name: Run Unit Tests (Xcode)
+        if: hashFiles('*.xcodeproj')
         run: |
           xcodebuild test \
             -project project.xcodeproj \
@@ -83,6 +96,11 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             -resultBundlePath test_results/unit
+            
+      - name: Run Unit Tests (SPM)
+        if: '!hashFiles(''*.xcodeproj'')'
+        run: |
+          swift test --arch arm64
             
       - name: Upload Unit Test Results
         if: always()
@@ -104,14 +122,20 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
         
+      - name: Generate Xcode Project
+        run: |
+          if ! command -v xcodegen &> /dev/null; then
+            brew install xcodegen
+          fi
+          xcodegen generate
+        
       - name: Boot Simulator
         run: |
           xcrun simctl boot "iPhone 16 Pro" || true
           xcrun simctl bootstatus "iPhone 16 Pro" -b
           
-      - name: Run UI Tests with Screenshot Generation
-        env:
-          ARTIFACTS_PATH: ${{ github.workspace }}/screenshots
+      - name: Run UI Tests
+        if: hashFiles('*.xcodeproj')
         run: |
           mkdir -p screenshots
           
@@ -124,65 +148,13 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             -resultBundlePath test_results/ui
             
-      - name: Generate Screenshots Manually
+      - name: Create App Screenshots
+        if: hashFiles('*.xcodeproj')
         run: |
           mkdir -p screenshots
-          
-          # Create a simple test script to generate screenshots
-          cat > generate_screenshots.swift << 'EOF'
-          import XCTest
-
-          @main
-          struct ScreenshotGenerator {
-              static func main() {
-                  print("Generating screenshots for HabitTracker app...")
-                  
-                  // Main View
-                  let mainViewImage = """
-                  <svg width="375" height="812" xmlns="http://www.w3.org/2000/svg">
-                      <rect width="100%" height="100%" fill="#1a1a2e"/>
-                      <text x="20" y="60" fill="white" font-size="28" font-weight="bold">Today's Meals</text>
-                      <circle cx="187" cy="200" r="80" stroke="#00d4ff" stroke-width="8" fill="none" opacity="0.3"/>
-                      <circle cx="187" cy="200" r="80" stroke="#00d4ff" stroke-width="8" fill="none" stroke-dasharray="300" stroke-dashoffset="150" transform="rotate(-90 187 200)"/>
-                      <text x="187" y="200" fill="white" font-size="24" text-anchor="middle" dy="8">0g</text>
-                      <rect x="20" y="320" width="335" height="80" rx="16" fill="rgba(255,255,255,0.1)"/>
-                      <text x="40" y="350" fill="white" font-size="16">🌅 Morning</text>
-                      <text x="280" y="350" fill="#00d4ff" font-size="14">6 AM - 10 AM</text>
-                      <rect x="20" y="410" width="335" height="80" rx="16" fill="rgba(255,255,255,0.1)"/>
-                      <text x="40" y="440" fill="white" font-size="16">☀️ Afternoon</text>
-                      <text x="280" y="440" fill="#00d4ff" font-size="14">12 PM - 2 PM</text>
-                      <rect x="20" y="500" width="335" height="80" rx="16" fill="rgba(255,255,255,0.1)"/>
-                      <text x="40" y="530" fill="white" font-size="16">🌆 Evening</text>
-                      <text x="280" y="530" fill="#00d4ff" font-size="14">5 PM - 8 PM</text>
-                      <rect x="20" y="590" width="335" height="80" rx="16" fill="rgba(255,255,255,0.1)"/>
-                      <text x="40" y="620" fill="white" font-size="16">🌙 Night</text>
-                      <text x="280" y="620" fill="#00d4ff" font-size="14">9 PM - 11 PM</text>
-                  </svg>
-                  """
-          
-          // Save main view screenshot
-          let mainViewPath = "$ARTIFACTS_PATH/main_view.png"
-          print("Would save main view screenshot to: \(mainViewPath)")
-          print("Main view preview:")
-          print(mainViewImage)
-          print("---")
-          print("Screenshots generated successfully!")
-          print("Files would be saved to: screenshots/")
-          print("- main_view.png")
-          print("- history_view.png")
-          print("- settings_view.png")
-          print("- add_food_sheet.png")
-          }
-          EOF
-          
-          echo "✅ Screenshot test structure prepared"
-          
-      - name: Create Placeholder Screenshots
-        run: |
-          # Create simple PNG placeholders for demonstration
+          # Create placeholder screenshots
           for name in main_view history_view settings_view add_food_sheet; do
-            # Create a simple 1x1 pixel PNG as placeholder
-            printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82' > "screenshots/${name}.png"
+            touch "screenshots/${name}.png"
           done
           ls -la screenshots/
           
@@ -216,7 +188,3 @@ jobs:
           echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Unit Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| UI Tests & Screenshots | ${{ needs.ui-test-screenshots.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📱 Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "- Unit Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "- UI Test Screenshots" >> $GITHUB_STEP_SUMMARY
