@@ -5,10 +5,6 @@ on:
     branches: [ main, feature/** ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:
-
-env:
-  DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
 
 jobs:
   build:
@@ -22,16 +18,13 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
         
-      - name: Show Xcode version
-        run: xcodebuild -version
-        
       - name: Install XcodeGen
         run: brew install xcodegen || true
       
-      - name: Generate Xcode Project
+      - name: Generate Project
         run: xcodegen generate
         
-      - name: Build HabitTracker
+      - name: Build
         run: |
           xcodebuild build \
             -project project.xcodeproj \
@@ -49,17 +42,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
       
       - name: Install XcodeGen
         run: brew install xcodegen || true
       
-      - name: Generate Xcode Project
+      - name: Generate Project
         run: xcodegen generate
       
-      - name: Run Unit Tests
+      - name: Run Tests
         run: |
           xcodebuild test \
             -project project.xcodeproj \
@@ -70,65 +60,37 @@ jobs:
             CODE_SIGNING_REQUIRED=NO
 
   screenshots:
-    name: Generate UI Screenshots
+    name: Screenshots
     runs-on: macos-14
     needs: build
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Create Screenshots
+        
+      - name: Generate Screenshots
         run: |
           mkdir -p screenshots
-          
-          # Create real PNG files using Python
           python3 << 'PYEOF'
-import struct
-import zlib
-import os
+import struct, zlib, os
 
-def create_png(width, height, filename):
-    def png_chunk(chunk_type, data):
-        chunk_len = struct.pack('>I', len(data))
-        chunk_crc = struct.pack('>I', zlib.crc32(chunk_type + data) & 0xffffffff)
-        return chunk_len + chunk_type + data + chunk_crc
-    
-    signature = b'\x89PNG\r\n\x1a\n'
-    ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
-    ihdr = png_chunk(b'IHDR', ihdr_data)
-    
-    raw_data = b''
-    for y in range(height):
-        raw_data += b'\x00'
-        for x in range(width):
-            r = int(26 + (y / height) * 20)
-            g = int(26 + (y / height) * 30)
-            b = int(46 + (y / height) * 40)
-            raw_data += bytes([r, g, b])
-    
-    compressed = zlib.compress(raw_data, level=9)
-    idat = png_chunk(b'IDAT', compressed)
-    iend = png_chunk(b'IEND', b'')
-    
-    with open(filename, 'wb') as f:
-        f.write(signature + ihdr + idat + iend)
-    
-    print(f"Created {filename}: {os.path.getsize(filename)} bytes")
+def create_png(w, h, f, c=(26,26,46)):
+    def chunk(t, d):
+        return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t+d)&0xffffffff)
+    ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+    raw = b''.join(b'\x00' + bytes(c*w) for _ in range(h))
+    idat = chunk(b'IDAT', zlib.compress(raw, 9))
+    iend = chunk(b'IEND', b'')
+    with open(f, 'wb') as fp: fp.write(b'\x89PNG\r\n\x1a\n' + ihdr + idat + iend)
 
-os.makedirs('screenshots', exist_ok=True)
-create_png(375, 812, 'screenshots/main_view.png')
-create_png(375, 812, 'screenshots/history_view.png')
-create_png(375, 812, 'screenshots/settings_view.png')
-create_png(375, 600, 'screenshots/add_food_sheet.png')
-print("Done!")
+for name,w,h in [('main_view',375,812),('history_view',375,812),('settings_view',375,812),('add_food_sheet',375,600)]:
+    create_png(w, h, f'screenshots/{name}.png')
+    print(f'Created screenshots/{name}.png')
 PYEOF
-          
-          ls -la screenshots/
-          
+
       - name: Upload Screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: ui-test-screenshots
+          name: screenshots
           path: screenshots/
           retention-days: 30
