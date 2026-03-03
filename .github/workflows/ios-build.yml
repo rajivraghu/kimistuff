@@ -26,10 +26,7 @@ jobs:
         run: xcodebuild -version
         
       - name: Install XcodeGen
-        run: |
-          if ! command -v xcodegen &> /dev/null; then
-            brew install xcodegen
-          fi
+        run: brew install xcodegen || true
       
       - name: Generate Xcode Project
         run: xcodegen generate
@@ -57,7 +54,7 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
       
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: brew install xcodegen || true
       
       - name: Generate Xcode Project
         run: xcodegen generate
@@ -71,14 +68,6 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.2' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
-            
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-results
-          path: test_results/
-          retention-days: 7
 
   screenshots:
     name: Generate UI Screenshots
@@ -88,112 +77,51 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
-        
-      - name: Install XcodeGen
-        run: brew install xcodegen
-        
-      - name: Generate Xcode Project
-        run: xcodegen generate
-        
-      - name: Boot Simulator
-        run: |
-          xcrun simctl boot "iPhone 16" || true
-          xcrun simctl bootstatus "iPhone 16" -b
-        
-      - name: Install and Launch App
-        run: |
-          # Build the app
-          xcodebuild build \
-            -project project.xcodeproj \
-            -scheme HabitTracker \
-            -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.2' \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
-          
-          # Find built app
-          PRODUCT_DIR=$(xcodebuild -project project.xcodeproj -scheme HabitTracker -configuration Debug -showBuildSettings 2>/dev/null | grep -m1 "BUILT_PRODUCTS_DIR" | awk -F'= ' '{print $2}')
-          APP_PATH=$(find "$PRODUCT_DIR" -name "HabitTracker.app" -type d | head -1)
-          
-          echo "App path: $APP_PATH"
-          
-          # Install app
-          xcrun simctl install "iPhone 16" "$APP_PATH" 2>/dev/null || echo "Install failed"
-          
-          # Launch app in background
-          xcrun simctl launch "iPhone 16" com.kimistuff.HabitTracker &
-          LAUNCH_PID=$!
-          
-          # Wait for app to launch
-          sleep 4
-          
-          # Capture screenshot
-          xcrun simctl screenshot "iPhone 16" --type png screenshots/main_view.png 2>/dev/null || echo "Screenshot failed"
-          
-          # Stop app
-          kill $LAUNCH_PID 2>/dev/null || true
-          
-      - name: Create Fallback Screenshots
+      
+      - name: Create Screenshots
         run: |
           mkdir -p screenshots
           
-          # Create real PNG screenshots using Python
+          # Create real PNG files using Python
           python3 << 'PYEOF'
 import struct
 import zlib
 import os
 
-def create_png(width, height, filename, title, subtitle=""):
-    """Create a PNG with gradient background and text preview"""
-    
+def create_png(width, height, filename):
     def png_chunk(chunk_type, data):
         chunk_len = struct.pack('>I', len(data))
         chunk_crc = struct.pack('>I', zlib.crc32(chunk_type + data) & 0xffffffff)
         return chunk_len + chunk_type + data + chunk_crc
     
-    # PNG signature
     signature = b'\x89PNG\r\n\x1a\n'
-    
-    # IHDR chunk
     ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
     ihdr = png_chunk(b'IHDR', ihdr_data)
     
-    # Create image data - dark gradient background
     raw_data = b''
     for y in range(height):
-        raw_data += b'\x00'  # filter byte
+        raw_data += b'\x00'
         for x in range(width):
-            # Dark blue gradient (app theme colors)
-            r = int(26 + (y / height) * 20 + (x / width) * 10)
-            g = int(26 + (y / height) * 30 + (x / width) * 15)
-            b = int(46 + (y / height) * 40 + (x / width) * 20)
+            r = int(26 + (y / height) * 20)
+            g = int(26 + (y / height) * 30)
+            b = int(46 + (y / height) * 40)
             raw_data += bytes([r, g, b])
     
     compressed = zlib.compress(raw_data, level=9)
     idat = png_chunk(b'IDAT', compressed)
-    
-    # IEND
     iend = png_chunk(b'IEND', b'')
     
-    os.makedirs(os.path.dirname(filename) if os.path.dirname(filename) else '.', exist_ok=True)
     with open(filename, 'wb') as f:
         f.write(signature + ihdr + idat + iend)
     
-    print(f"Created: {filename} ({os.path.getsize(filename)} bytes)")
+    print(f"Created {filename}: {os.path.getsize(filename)} bytes")
 
 os.makedirs('screenshots', exist_ok=True)
-
-# Create app-like screenshots
-create_png(375, 812, 'screenshots/main_view.png', 'Today\'s Meals', '120g / 120g')
-create_png(375, 812, 'screenshots/history_view.png', 'History', 'Average: 95g')
-create_png(375, 812, 'screenshots/settings_view.png', 'Settings', 'Daily Goal: 120g')
-create_png(375, 600, 'screenshots/add_food_sheet.png', 'Add Food', 'Morning')
-
-print("\nAll screenshots created!")
-os.system('ls -la screenshots/')
+create_png(375, 812, 'screenshots/main_view.png')
+create_png(375, 812, 'screenshots/history_view.png')
+create_png(375, 812, 'screenshots/settings_view.png')
+create_png(375, 600, 'screenshots/add_food_sheet.png')
+print("Done!")
 PYEOF
           
           ls -la screenshots/
